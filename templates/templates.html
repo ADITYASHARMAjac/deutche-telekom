@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deutsche Telekom | Templates</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">Deutsche Telekom</div>
+      <nav class="nav">
+        <a href="/" class="nav-item">Navigation</a>
+        <a href="/templates" class="nav-item active">Composers</a>
+      </nav>
+      <div class="sidebar-meta">
+        <div class="muted">SMTP</div>
+        <div class="small">{{ default_smtp }}:{{ default_port }}</div>
+      </div>
+    </aside>
+    <div class="main-area">
+      <header class="hero">
+        <div>
+          <div class="eyebrow">Template Library</div>
+          <h1>Standard Content</h1>
+          <div class="hint">Pick a base, copy tokens, and refine in the dashboard compose area.</div>
+        </div>
+      </header>
+
+      <main class="template-layout">
+        <section class="card template-list" id="templateList">
+          {% for tpl in templates %}
+          <div class="template-row" data-name="{{ tpl.name }}" data-category="{{ tpl.category }}" data-type="{{ tpl.type }}" data-source="{{ tpl.source }}">
+            <div>
+              <div class="row-title">{{ tpl.name }}</div>
+              <div class="hint">{{ tpl.category }} · {{ tpl.type }} · {{ tpl.source }}</div>
+              <div class="hint">Subject: {{ tpl.subject }}</div>
+            </div>
+            <span class="badge">{{ tpl.source }}</span>
+          </div>
+          {% endfor %}
+        </section>
+
+        <section class="card template-editor">
+          <div class="card-head">
+            <div>
+              <h3 id="editTitle">Select a template</h3>
+              <p class="hint">Choose a template on the left to edit its content.</p>
+            </div>
+            <span class="badge" id="editSource">—</span>
+          </div>
+          <div class="two-col" style="gap:10px;">
+            <div>
+              <label for="tplCategory">Category</label>
+              <select id="tplCategory">
+                <option>Service</option>
+                <option>Maintenance</option>
+                <option>Onboarding</option>
+                <option>Lifecycle</option>
+                <option>Announcement</option>
+                <option>Operational</option>
+                <option>Incident</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div>
+              <label for="tplType">Email type</label>
+              <select id="tplType">
+                <option>Transactional</option>
+                <option>Operational</option>
+                <option>Lifecycle</option>
+                <option>Marketing</option>
+                <option>General</option>
+              </select>
+            </div>
+          </div>
+          <label for="tplSubject">Subject</label>
+          <input id="tplSubject" placeholder="Subject line" />
+          <label for="tplBody">Body</label>
+          <textarea id="tplBody" placeholder="Edit the email body"></textarea>
+          <label for="tplTokens">Tokens (comma or newline separated)</label>
+          <textarea id="tplTokens" placeholder="{{token_one}}, {{token_two}}"></textarea>
+          <div class="meta-row" style="margin-top:8px;">
+            <span class="muted" id="tplBodyCount">0 chars</span>
+            <button id="saveTemplate" disabled>Save Changes</button>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+<script>
+  const tplCategory = document.getElementById('tplCategory');
+  const tplType = document.getElementById('tplType');
+  const tplSubject = document.getElementById('tplSubject');
+  const tplBody = document.getElementById('tplBody');
+  const tplTokens = document.getElementById('tplTokens');
+  const tplBodyCount = document.getElementById('tplBodyCount');
+  const saveTemplate = document.getElementById('saveTemplate');
+  const templateList = document.getElementById('templateList');
+  const editTitle = document.getElementById('editTitle');
+  const editSource = document.getElementById('editSource');
+  let currentName = null;
+
+  function renderBodyCount() {
+    tplBodyCount.textContent = `${tplBody.value.length} chars`;
+  }
+
+  const STORAGE_KEY = 'selectedTemplateName';
+
+  function clearActive() {
+    templateList.querySelectorAll('.template-row').forEach(row => row.classList.remove('active'));
+  }
+
+  function renderBodyCount() {
+    tplBodyCount.textContent = `${tplBody.value.length} chars`;
+  }
+
+  function populateEditor(tpl) {
+    currentName = tpl.name;
+    editTitle.textContent = tpl.name;
+    editSource.textContent = tpl.source || '';
+    tplCategory.value = tpl.category || 'Service';
+    tplType.value = tpl.type || 'Transactional';
+    tplSubject.value = tpl.subject || '';
+    tplBody.value = tpl.body || '';
+    tplTokens.value = (tpl.tokens || []).join(', ');
+    saveTemplate.disabled = false;
+    renderBodyCount();
+    try { localStorage.setItem(STORAGE_KEY, tpl.name); } catch (e) {}
+  }
+
+  async function loadTemplates() {
+    try {
+      const res = await fetch('/api/templates');
+      const data = await res.json();
+      templateList.innerHTML = '';
+      let stored = null;
+      try { stored = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+      (data.templates || []).forEach((tpl, idx) => {
+        const row = document.createElement('div');
+        row.className = 'template-row';
+        row.dataset.name = tpl.name;
+        row.dataset.category = tpl.category || '';
+        row.dataset.type = tpl.type || '';
+        row.dataset.source = tpl.source || '';
+        row.innerHTML = `
+          <div>
+            <div class="row-title">${tpl.name}</div>
+            <div class="hint">${tpl.category || ''} · ${tpl.type || ''} · ${tpl.source || ''}</div>
+            <div class="hint">Subject: ${tpl.subject}</div>
+          </div>
+          <span class="badge">${tpl.source || ''}</span>
+        `;
+        row.addEventListener('click', () => {
+          clearActive();
+          row.classList.add('active');
+          populateEditor(tpl);
+        });
+        templateList.appendChild(row);
+        if ((stored && stored === tpl.name) || (!stored && idx === 0)) {
+          row.classList.add('active');
+          populateEditor(tpl);
+        }
+      });
+    } catch (err) {
+      console.error('Template load failed', err);
+    }
+  }
+
+  saveTemplate.addEventListener('click', async () => {
+    saveTemplate.disabled = true;
+    const payload = {
+      name: currentName,
+      category: tplCategory.value,
+      type: tplType.value,
+      source: editSource.textContent,
+      subject: tplSubject.value,
+      body: tplBody.value,
+      tokens: tplTokens.value,
+    };
+    try {
+      const res = await fetch('/api/templates/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unable to save');
+      await loadTemplates();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      saveTemplate.disabled = false;
+    }
+  });
+
+  tplBody.addEventListener('input', renderBodyCount);
+
+  renderBodyCount();
+  loadTemplates();
+</script>
+</body>
+</html>

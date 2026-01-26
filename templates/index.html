@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deutsche Telekom Mail Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">Deutsche Telekom</div>
+      <nav class="nav">
+        <a href="/" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">Navigations</a>
+        <a href="/templates" class="nav-item {% if active_page == 'templates' %}active{% endif %}">Composers</a>
+      </nav>
+      <div class="sidebar-meta">
+        <div class="muted">SMTP</div>
+        <div class="small">{{ default_smtp }}:{{ default_port }}</div>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="page-head">
+        <div>
+          <div class="eyebrow">Mail Desk</div>
+          <h1>Deutsche Telecommunication Dashboard</h1>
+          <div class="hint">Upload recipients, watch stats, review the selected template, and track logs.</div>
+        </div>
+        <div class="header-actions">
+          <button type="button" class="ghost" id="refreshBtn">Refresh now</button>
+          <span class="pill">Delay {{ delay_min }}–{{ delay_max }}s</span>
+        </div>
+      </header>
+
+      <main class="layout simple-layout">
+        <section class="card wide-2">
+          <div class="card-head">
+            <div>
+              <h3>Recipients</h3>
+              <p class="hint">Upload CSV or add a single address.</p>
+            </div>
+            <div class="flex" style="gap:8px; align-items:center;">
+              <a class="pill subtle" href="/templates">Open templates</a>
+              <label for="templateSelect" class="muted" style="margin:0;">Template</label>
+              <select id="templateSelect" style="max-width:220px;"></select>
+              <button type="button" class="ghost" id="reloadTemplates">Reload</button>
+              <button type="button" id="startBtn">Start sending</button>
+              <span class="muted" id="startStatus">Idle</span>
+            </div>
+          </div>
+          <p class="hint" id="tplSummary" style="margin:0 0 8px;">No template loaded</p>
+          <form id="uploadForm" class="flex" enctype="multipart/form-data">
+            <input type="file" name="file" accept=".csv" required />
+            <button type="submit">Upload CSV</button>
+            <span class="muted" id="uploadStatus">No file yet</span>
+          </form>
+          <form id="manualForm" class="flex manual-row">
+            <input type="email" id="manualEmail" placeholder="Add single email (e.g. user@example.com)" />
+            <button type="submit" class="ghost">Add email</button>
+          </form>
+          <div class="status" style="margin-top:14px;">
+            <div class="item"><strong>Total Emails</strong><span id="totalCount">0</span></div>
+            <div class="item"><strong>Queued</strong><span id="queuedCount">0</span></div>
+            <div class="item"><strong>In Progress</strong><span id="inProgress">No</span></div>
+            <div class="item"><strong>Current</strong><span id="currentEmail">—</span></div>
+          </div>
+          <div class="list" id="emailList">Upload a CSV to see addresses.</div>
+        </section>
+
+        <section class="card wide-2">
+          <div class="card-head">
+            <div>
+              <h3>Run Log & Failures</h3>
+              <p class="hint">Live status auto-refreshes every 1.5s.</p>
+            </div>
+          </div>
+          <div class="status">
+            <div class="item"><strong>Sent</strong><span id="sentCount">0</span></div>
+            <div class="item"><strong>Failed</strong><span id="failedCount">0</span></div>
+            <div class="item"><strong>Last Error</strong><span id="lastError">—</span></div>
+            <div class="item"><strong>Finished</strong><span id="finishedAt">—</span></div>
+          </div>
+          <div class="log-grid">
+            <div class="list" id="log"></div>
+            <div class="list failure-list" id="failList">No failures yet.</div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+      <script>
+        const uploadForm = document.getElementById('uploadForm');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const emailList = document.getElementById('emailList');
+        const totalCount = document.getElementById('totalCount');
+        const queuedCount = document.getElementById('queuedCount');
+        const inProgress = document.getElementById('inProgress');
+        const currentEmail = document.getElementById('currentEmail');
+        const sentCount = document.getElementById('sentCount');
+        const failedCount = document.getElementById('failedCount');
+        const lastError = document.getElementById('lastError');
+        const finishedAt = document.getElementById('finishedAt');
+        const logEl = document.getElementById('log');
+        const failList = document.getElementById('failList');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const manualForm = document.getElementById('manualForm');
+        const manualEmail = document.getElementById('manualEmail');
+        const statTotal = document.getElementById('statTotal');
+        const statSent = document.getElementById('statSent');
+        const statQueued = document.getElementById('statQueued');
+        const statFailed = document.getElementById('statFailed');
+        const tplSummary = document.getElementById('tplSummary');
+        const templateSelect = document.getElementById('templateSelect');
+        const reloadTemplates = document.getElementById('reloadTemplates');
+        const startBtn = document.getElementById('startBtn');
+        const startStatus = document.getElementById('startStatus');
+
+        let statusTimer = null;
+        let templatesData = [];
+        let currentTemplate = null;
+
+        const STORAGE_KEY = 'selectedTemplateName';
+
+        function renderTemplate(tpl) {
+          if (!tpl) {
+            tplSummary.textContent = 'No template available';
+            currentTemplate = null;
+            return;
+          }
+          currentTemplate = tpl;
+          tplSummary.textContent = `${tpl.name} • ${tpl.category} • ${tpl.type} — ${tpl.subject}`;
+          try { localStorage.setItem(STORAGE_KEY, tpl.name); } catch (e) {}
+        }
+
+        async function loadTemplatesIntoSelect(preserveName) {
+          try {
+            const res = await fetch('/api/templates');
+            const data = await res.json();
+            templatesData = data.templates || [];
+            if (!templateSelect) return;
+            templateSelect.innerHTML = '';
+            templatesData.forEach((tpl) => {
+              const opt = document.createElement('option');
+              opt.value = tpl.name;
+              opt.textContent = `${tpl.name} (${tpl.category})`;
+              templateSelect.appendChild(opt);
+            });
+            let chosenName = '';
+            const stored = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } })();
+            if (preserveName && templatesData.find(t => t.name === preserveName)) {
+              chosenName = preserveName;
+            } else if (stored && templatesData.find(t => t.name === stored)) {
+              chosenName = stored;
+            } else {
+              chosenName = templatesData[0]?.name || '';
+            }
+            if (chosenName) {
+              templateSelect.value = chosenName;
+            }
+            renderTemplate(templatesData.find(t => t.name === chosenName));
+          } catch (err) {
+            tplSummary.textContent = 'Template load failed';
+          }
+        }
+
+        if (templateSelect) {
+          templateSelect.addEventListener('change', () => {
+            const selected = templatesData.find(t => t.name === templateSelect.value);
+            renderTemplate(selected);
+          });
+        }
+
+        if (reloadTemplates) {
+          reloadTemplates.addEventListener('click', () => loadTemplatesIntoSelect(templateSelect.value));
+        }
+
+        if (startBtn) {
+          startBtn.addEventListener('click', async () => {
+            const total = parseInt(totalCount.textContent || '0', 10);
+            if (!total || Number.isNaN(total)) {
+              startStatus.textContent = 'Upload emails first';
+              startStatus.style.color = '#d92b4c';
+              return;
+            }
+            startBtn.disabled = true;
+            startBtn.textContent = 'Starting...';
+            startStatus.textContent = 'Starting…';
+            startStatus.style.color = '';
+            try {
+              const payload = currentTemplate ? { subject: currentTemplate.subject, body: currentTemplate.body } : {};
+              const res = await fetch('/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'Could not start sending');
+              uploadStatus.textContent = 'Sending in progress...';
+              startStatus.textContent = 'Sending…';
+              refreshStatus();
+            } catch (err) {
+              startStatus.textContent = err.message || 'Start failed';
+              startStatus.style.color = '#d92b4c';
+            } finally {
+              startBtn.disabled = false;
+              startBtn.textContent = 'Start sending';
+            }
+          });
+        }
+
+        if (refreshBtn) {
+          refreshBtn.addEventListener('click', () => {
+            refreshStatus();
+            loadTemplatesIntoSelect(templateSelect.value);
+          });
+        }
+
+        uploadForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const formData = new FormData(uploadForm);
+          uploadStatus.textContent = 'Uploading...';
+          try {
+            const res = await fetch('/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Upload failed');
+            totalCount.textContent = data.count;
+            queuedCount.textContent = data.count;
+            uploadStatus.textContent = `Loaded ${data.count} emails.`;
+            emailList.textContent = data.emails.join('\n');
+            sentCount.textContent = '0';
+            failedCount.textContent = '0';
+            finishedAt.textContent = '—';
+            lastError.textContent = '—';
+            refreshStatus();
+          } catch (err) {
+            uploadStatus.textContent = err.message;
+          }
+        });
+
+        manualForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const email = (manualEmail.value || '').trim();
+          if (!email) return;
+          manualEmail.disabled = true;
+          try {
+            const res = await fetch('/add_email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Could not add email');
+            uploadStatus.textContent = `Queue size ${data.total}`;
+            emailList.textContent = data.emails.join('\n');
+            manualEmail.value = '';
+            refreshStatus();
+          } catch (err) {
+            alert(err.message);
+          } finally {
+            manualEmail.disabled = false;
+          }
+        });
+
+        async function refreshStatus() {
+          try {
+            const res = await fetch('/status');
+            const data = await res.json();
+            const total = data.total || 0;
+            totalCount.textContent = total;
+            queuedCount.textContent = total - data.sent - data.failed.length;
+            inProgress.textContent = data.in_progress ? 'Yes' : 'No';
+            currentEmail.textContent = data.current || '—';
+            if (sentCount) sentCount.textContent = data.sent;
+            if (failedCount) failedCount.textContent = data.failed.length;
+            if (statTotal) statTotal.textContent = total;
+            if (statSent) statSent.textContent = data.sent;
+            if (statQueued) statQueued.textContent = Math.max(0, total - data.sent - data.failed.length);
+            if (statFailed) statFailed.textContent = data.failed.length;
+            if (lastError) lastError.textContent = data.last_error || '—';
+            if (finishedAt) finishedAt.textContent = data.finished_at ? new Date(data.finished_at * 1000).toLocaleTimeString() : '—';
+
+            logEl.innerHTML = '';
+            (data.log || []).forEach((entry) => {
+              const line = document.createElement('div');
+              line.className = 'log-line ' + (entry.message.startsWith('Sent') ? 'ok' : (entry.message.startsWith('Failed') || entry.message.startsWith('Fatal') ? 'fail' : ''));
+              const timeStr = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleTimeString() : '';
+              line.textContent = `${timeStr} — ${entry.message}`;
+              logEl.appendChild(line);
+            });
+
+            if (startStatus) {
+              if (data.in_progress) {
+                startStatus.textContent = 'Sending…';
+                startStatus.style.color = '';
+              } else if (data.last_error) {
+                startStatus.textContent = `Error: ${data.last_error}`;
+                startStatus.style.color = '#d92b4c';
+              } else if (data.finished_at) {
+                startStatus.textContent = 'Finished';
+                startStatus.style.color = '';
+              } else {
+                startStatus.textContent = 'Idle';
+                startStatus.style.color = '';
+              }
+            }
+
+            if (failList) {
+              failList.innerHTML = '';
+              if ((data.failed || []).length === 0) {
+                failList.textContent = 'No failures yet.';
+              } else {
+                data.failed.forEach((item) => {
+                  const line = document.createElement('div');
+                  line.className = 'fail-line';
+                  line.textContent = `${item.email} — ${item.error}`;
+                  failList.appendChild(line);
+                });
+              }
+            }
+          } catch (err) {
+            console.error('Status error', err);
+          }
+        }
+
+        statusTimer = setInterval(refreshStatus, 1500);
+        refreshStatus();
+          loadTemplatesIntoSelect();
+      </script>
+    </body>
+    </html>
