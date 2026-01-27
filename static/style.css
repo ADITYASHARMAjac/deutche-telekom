@@ -253,6 +253,51 @@ button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 30
 .failure-list { color: var(--danger); }
 .fail-line { margin-bottom: 6px; }
 
+.attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.attachment-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.attachment-item span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.remove-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.remove-btn:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
 @media (max-width: 920px) {
   .hero { flex-direction: column; align-items: flex-start; gap: 12px; }
   .header-actions { justify-content: flex-start; }

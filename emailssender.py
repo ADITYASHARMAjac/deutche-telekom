@@ -13,8 +13,11 @@ import random
 import smtplib
 import threading
 import time
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email import encoders
+import mimetypes
 
 from flask import Flask, jsonify, render_template, request
 
@@ -91,6 +94,7 @@ state = {
         "log": [],
         "current": None,
         "config": {},
+        "attached_files": [],
 }
 
 templates_lock = threading.Lock()
@@ -155,6 +159,7 @@ def reset_state(emails=None):
                 state["log"] = []
                 state["current"] = None
                 state["config"] = {}
+                state["attached_files"] = []
 
 
 def normalize_email(value):
@@ -198,12 +203,27 @@ def append_log(message):
                         state["log"] = state["log"][-500:]
 
 
-def send_email(server, sender_email, receiver_email, subject, body):
+def send_email(server, sender_email, receiver_email, subject, body, attachments=None):
         msg = MIMEMultipart()
         msg["From"] = sender_email
         msg["To"] = receiver_email
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
+        
+        # Attach files if provided
+        if attachments:
+                for file_data in attachments:
+                        filename = file_data["filename"]
+                        content = file_data["content"]
+                        try:
+                                part = MIMEBase('application', 'octet-stream')
+                                part.set_payload(content)
+                                encoders.encode_base64(part)
+                                part.add_header('Content-Disposition', f'attachment; filename= {filename}')
+                                msg.attach(part)
+                        except Exception as e:
+                                append_log(f"Warning: Could not attach {filename}: {e}")
+        
         server.sendmail(sender_email, receiver_email, msg.as_string())
 
 
@@ -216,6 +236,7 @@ def send_worker(config):
         body = config["body"]
         delay_min = config["delay_min"]
         delay_max = config["delay_max"]
+        attachments = config.get("attachments", [])
 
         with state_lock:
                 emails = list(state["emails"])
@@ -243,8 +264,9 @@ def send_worker(config):
                                 body_with_slot = body.replace("{{Match Name}}", f"Slot {slot_number}/{total}")
                                 if "{{Match Name}}" not in body:
                                         body_with_slot = f"Slot {slot_number}/{total}\n\n{body}"
-                                send_email(server, sender_email, recipient, subject, body_with_slot)
-                                append_log(f"Sent slot {slot_number}/{total} to {recipient}")
+                                send_email(server, sender_email, recipient, subject, body_with_slot, attachments)
+                                attachment_info = f" with {len(attachments)} file(s)" if attachments else ""
+                                append_log(f"Sent slot {slot_number}/{total} to {recipient}{attachment_info}")
                                 with state_lock:
                                         state["sent"] += 1
                         except Exception as exc:  # catch individual send errors and continue
@@ -357,6 +379,73 @@ def upload_csv():
         return jsonify({"count": len(emails), "emails": emails})
 
 
+@app.route("/upload_attachment", methods=["POST"])
+def upload_attachment():
+        MAX_FILE_SIZE = 1 * 1024 * 1024  # 1 MB in bytes
+        
+        if "file" not in request.files:
+                return jsonify({"error": "File is required"}), 400
+
+        file = request.files["file"]
+        if not file or file.filename == '':
+                return jsonify({"error": "No file selected"}), 400
+
+        # Check file size
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        
+        if file_size > MAX_FILE_SIZE:
+                return jsonify({"error": f"File size must be less than 1 MB. Current size: {file_size / (1024*1024):.2f} MB"}), 400
+
+        try:
+                file_content = file.read()
+                filename = file.filename
+                
+                with state_lock:
+                        # Check if file already exists
+                        existing = next((f for f in state["attached_files"] if f["filename"] == filename), None)
+                        if existing:
+                                return jsonify({"error": f"File '{filename}' already attached"}), 409
+                        
+                        state["attached_files"].append({
+                                "filename": filename,
+                                "content": file_content,
+                                "size": file_size
+                        })
+                        
+                        attached_files = [{"filename": f["filename"], "size": f["size"]} for f in state["attached_files"]]
+                
+                append_log(f"Attached file: {filename} ({file_size / 1024:.1f} KB)")
+                return jsonify({
+                        "status": "attached",
+                        "filename": filename,
+                        "size": file_size,
+                        "attached_files": attached_files
+                })
+        except Exception as e:
+                return jsonify({"error": f"Failed to process file: {str(e)}"}), 400
+
+
+@app.route("/remove_attachment", methods=["POST"])
+def remove_attachment():
+        data = request.get_json(force=True)
+        filename = data.get("filename", "").strip()
+        
+        if not filename:
+                return jsonify({"error": "Filename is required"}), 400
+
+        with state_lock:
+                if state["in_progress"]:
+                        return jsonify({"error": "Cannot modify attachments while sending"}), 409
+                
+                state["attached_files"] = [f for f in state["attached_files"] if f["filename"] != filename]
+                attached_files = [{"filename": f["filename"], "size": f["size"]} for f in state["attached_files"]]
+        
+        append_log(f"Removed attachment: {filename}")
+        return jsonify({"status": "removed", "attached_files": attached_files})
+
+
 @app.route("/start", methods=["POST"])
 def start_sending():
         data = request.get_json(force=True)
@@ -377,6 +466,10 @@ def start_sending():
         if not sender_email or not app_password:
                 return jsonify({"error": "Server is missing sender credentials"}), 500
 
+        # Get attached files
+        with state_lock:
+                attachments = list(state["attached_files"])
+
         config = {
                 "sender_email": sender_email,
                 "app_password": app_password,
@@ -386,6 +479,7 @@ def start_sending():
                 "body": body,
                 "delay_min": DELAY_MIN_SECONDS,
                 "delay_max": DELAY_MAX_SECONDS,
+                "attachments": attachments,
         }
 
         thread = threading.Thread(target=send_worker, args=(config,), daemon=True)

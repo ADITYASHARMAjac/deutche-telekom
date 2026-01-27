@@ -74,6 +74,21 @@
         <section class="card wide-2">
           <div class="card-head">
             <div>
+              <h3>File Attachments</h3>
+              <p class="hint">Upload files up to 1 MB to attach to all emails.</p>
+            </div>
+          </div>
+          <form id="attachmentForm" class="flex" enctype="multipart/form-data">
+            <input type="file" id="attachmentInput" required />
+            <button type="submit">Attach File</button>
+            <span class="muted" id="attachmentStatus">No files attached</span>
+          </form>
+          <div class="list attachment-list" id="attachmentList"></div>
+        </section>
+
+        <section class="card wide-2">
+          <div class="card-head">
+            <div>
               <h3>Run Log & Failures</h3>
               <p class="hint">Live status auto-refreshes every 1.5s.</p>
             </div>
@@ -118,6 +133,10 @@
         const reloadTemplates = document.getElementById('reloadTemplates');
         const startBtn = document.getElementById('startBtn');
         const startStatus = document.getElementById('startStatus');
+        const attachmentForm = document.getElementById('attachmentForm');
+        const attachmentInput = document.getElementById('attachmentInput');
+        const attachmentStatus = document.getElementById('attachmentStatus');
+        const attachmentList = document.getElementById('attachmentList');
 
         let statusTimer = null;
         let templatesData = [];
@@ -328,7 +347,82 @@
 
         statusTimer = setInterval(refreshStatus, 1500);
         refreshStatus();
-          loadTemplatesIntoSelect();
+        loadTemplatesIntoSelect();
+
+        // File attachment handlers
+        if (attachmentForm) {
+          attachmentForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const file = attachmentInput.files[0];
+            if (!file) {
+              attachmentStatus.textContent = 'No file selected';
+              return;
+            }
+
+            const MAX_SIZE = 1 * 1024 * 1024; // 1 MB
+            if (file.size > MAX_SIZE) {
+              attachmentStatus.textContent = `File too large: ${(file.size / (1024 * 1024)).toFixed(2)} MB (max 1 MB)`;
+              attachmentStatus.style.color = '#d92b4c';
+              return;
+            }
+
+            attachmentStatus.textContent = 'Uploading...';
+            attachmentStatus.style.color = '';
+            
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+              const res = await fetch('/upload_attachment', { method: 'POST', body: formData });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'Upload failed');
+              
+              attachmentStatus.textContent = `Attached ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+              attachmentStatus.style.color = '#059669';
+              attachmentInput.value = '';
+              updateAttachmentList(data.attached_files);
+            } catch (err) {
+              attachmentStatus.textContent = err.message;
+              attachmentStatus.style.color = '#d92b4c';
+            }
+          });
+        }
+
+        function updateAttachmentList(attachments) {
+          if (!attachmentList) return;
+          attachmentList.innerHTML = '';
+          if (!attachments || attachments.length === 0) {
+            attachmentList.textContent = 'No files attached';
+            return;
+          }
+          attachments.forEach((file) => {
+            const item = document.createElement('div');
+            item.className = 'attachment-item';
+            item.innerHTML = `
+              <span>${file.filename} (${(file.size / 1024).toFixed(1)} KB)</span>
+              <button type="button" class="remove-btn" data-filename="${file.filename}">Remove</button>
+            `;
+            const removeBtn = item.querySelector('.remove-btn');
+            removeBtn.addEventListener('click', async () => {
+              try {
+                const res = await fetch('/remove_attachment', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ filename: file.filename }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Remove failed');
+                updateAttachmentList(data.attached_files);
+                attachmentStatus.textContent = data.attached_files.length > 0 
+                  ? `${data.attached_files.length} file(s) attached`
+                  : 'No files attached';
+              } catch (err) {
+                alert(err.message);
+              }
+            });
+            attachmentList.appendChild(item);
+          });
+        }
       </script>
     </body>
     </html>
