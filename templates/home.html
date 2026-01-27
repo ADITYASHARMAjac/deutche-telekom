@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deutsche Telekom | Home</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
+      prefix: 'tw-',
+      corePlugins: { preflight: false },
+    };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">Deutsche Telekom</div>
+      <nav class="nav">
+        <a href="/home" class="nav-item {% if active_page == 'home' %}active{% endif %}">Home</a>
+        <a href="/" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">Dashboard</a>
+        <a href="/templates" class="nav-item {% if active_page == 'templates' %}active{% endif %}">Composers</a>
+      </nav>
+      <div class="sidebar-meta">
+        <div class="muted">SMTP</div>
+        <div class="small">{{ default_smtp }}:{{ default_port }}</div>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="hero-aurora">
+        <div class="glow"></div>
+        <div class="glow slow"></div>
+        <div class="hero-copy">
+          <p class="eyebrow">Operations Command</p>
+          <h1>OUR Services & Protocol</h1>
+          <p class="lead">A single cockpit for compliant outreach: controlled delays, templated content, and attachment-safe delivery.</p>
+          <div class="hero-actions">
+            <a class="pill" href="/">Open Dashboard</a>
+            <a class="ghost" href="/templates">Edit Templates</a>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat-card">
+            <span class="label">Delay Window</span>
+            <strong>{{ delay_min }}–{{ delay_max }}s</strong>
+            <span class="muted">Adaptive pacing</span>
+          </div>
+          <div class="stat-card">
+            <span class="label">Attachment Policy</span>
+            <strong>&lt; 1 MB</strong>
+            <span class="muted">Size + duplication guard</span>
+          </div>
+          <div class="stat-card">
+            <span class="label">TLS SMTP</span>
+            <strong>{{ default_smtp }}</strong>
+            <span class="muted">Port {{ default_port }}</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout home-layout">
+        <section class="card video-card">
+          <div class="card-head">
+            <div>
+              <h3>Animated Ops Reel</h3>
+              <p class="hint">A quick visual flyover of safeguards: pacing, templating, attachments.</p>
+            </div>
+            <div class="tw-flex tw-gap-2 tw-items-center">
+              <span class="pill subtle">Live demo</span>
+              <span class="pill">Protocol ready</span>
+            </div>
+          </div>
+          <div class="video-shell">
+            <div class="video-overlay">
+              <div class="floating-icon">⚡</div>
+              <div class="floating-icon delay">📡</div>
+              <div class="floating-icon soft">🛡️</div>
+            </div>
+            <video class="video" autoplay muted loop playsinline>
+              <source src="https://storage.googleapis.com/coverr-main/mp4/Mt_Baker.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+            <div class="video-glow"></div>
+          </div>
+          <div class="tw-flex tw-flex-wrap tw-gap-2 tw-mt-3">
+            <span class="chip">Sequenced</span>
+            <span class="chip">Attachment-safe</span>
+            <span class="chip">TLS-first</span>
+            <span class="chip">Template-locked</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h3>Service Modules</h3>
+              <p class="hint">Each module aligns with Deutsche Telekom delivery policy.</p>
+            </div>
+          </div>
+          <div class="service-grid">
+            <div class="service-card">
+              <div class="dot pulse"></div>
+              <h4 class="tw-flex tw-items-center tw-gap-2">Mail Desk <span class="tw-text-sm tw-bg-rose-50 tw-text-rose-600 tw-px-2 tw-py-0.5 tw-rounded-full tw-border tw-border-rose-100">Live</span></h4>
+              <p>Sequential send with live telemetry, paced to avoid throttling.</p>
+              <ul>
+                <li>Queue visibility and live logs</li>
+                <li>CSV or single-address intake</li>
+                <li>Attachment fan-out (sub-1 MB)</li>
+              </ul>
+            </div>
+            <div class="service-card">
+              <div class="dot pulse"></div>
+              <h4 class="tw-flex tw-items-center tw-gap-2">Template Composer <span class="tw-text-xs tw-font-semibold tw-text-emerald-600">v2</span></h4>
+              <p>Curated templates with tokenized placeholders to standardize messaging.</p>
+              <ul>
+                <li>Guardrails on required subject/body</li>
+                <li>Token lists for operator guidance</li>
+                <li>Live preview-friendly formatting</li>
+              </ul>
+            </div>
+            <div class="service-card">
+              <div class="dot pulse"></div>
+              <h4 class="tw-flex tw-items-center tw-gap-2">Delivery Protocol <span class="tw-text-xs tw-font-semibold tw-text-indigo-600">Hardened</span></h4>
+              <p>Safe defaults that comply with SMTP and attachment guidance.</p>
+              <ul>
+                <li>TLS start via port {{ default_port }}</li>
+                <li>Local env-only credentials</li>
+                <li>Attachment dedupe and limits</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h3>Operational Protocol</h3>
+              <p class="hint">Runbook highlights for operators.</p>
+            </div>
+          </div>
+          <div class="protocol-list">
+            <div class="protocol-item">
+              <span class="badge">01</span>
+              <div>
+                <strong>Authenticate securely</strong>
+                <p class="muted">Use env-provided sender + app password; avoid client-supplied credentials.</p>
+              </div>
+            </div>
+            <div class="protocol-item">
+              <span class="badge">02</span>
+              <div>
+                <strong>Pace deliveries</strong>
+                <p class="muted">Maintain {{ delay_min }}–{{ delay_max }} second delays to respect provider rate limits.</p>
+              </div>
+            </div>
+            <div class="protocol-item">
+              <span class="badge">03</span>
+              <div>
+                <strong>Limit attachments</strong>
+                <p class="muted">1 MB max per file, deduplicated by filename to prevent bloat or repeats.</p>
+              </div>
+            </div>
+            <div class="protocol-item">
+              <span class="badge">04</span>
+              <div>
+                <strong>Log and recover</strong>
+                <p class="muted">Live log tail and failure list let you retry without dropping the entire run.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

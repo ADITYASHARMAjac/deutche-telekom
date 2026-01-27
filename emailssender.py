@@ -305,6 +305,18 @@ def index():
         )
 
 
+@app.route("/home")
+def home_page():
+        return render_template(
+                "home.html",
+                active_page="home",
+                default_smtp=DEFAULT_SMTP_SERVER,
+                default_port=DEFAULT_SMTP_PORT,
+                delay_min=DELAY_MIN_SECONDS,
+                delay_max=DELAY_MAX_SECONDS,
+        )
+
+
 @app.route("/templates")
 def templates_page():
         with templates_lock:

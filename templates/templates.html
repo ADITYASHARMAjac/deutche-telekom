@@ -14,7 +14,8 @@
     <aside class="sidebar">
       <div class="brand">Deutsche Telekom</div>
       <nav class="nav">
-        <a href="/" class="nav-item">Navigation</a>
+        <a href="/home" class="nav-item {% if active_page == 'home' %}active{% endif %}">Home</a>
+        <a href="/" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">Dashboard</a>
         <a href="/templates" class="nav-item active">Composers</a>
       </nav>
       <div class="sidebar-meta">
