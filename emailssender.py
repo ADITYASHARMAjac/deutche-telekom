@@ -541,7 +541,7 @@ def add_email():
 
 
 if __name__ == "__main__":
-	# Run the Flask dev server. For production, use a proper WSGI server (gunicorn).
-	port = int(os.getenv("PORT", 5000))
-	debug = os.getenv("FLASK_ENV", "development") == "development"
-	app.run(host="0.0.0.0", port=port, debug=debug)
+        # Run the Flask dev server. For production, use a proper WSGI server (gunicorn).
+        port = int(os.getenv("PORT", 5000))
+        debug = os.getenv("FLASK_ENV", "production") == "development"
+        app.run(host="0.0.0.0", port=port, debug=debug)
